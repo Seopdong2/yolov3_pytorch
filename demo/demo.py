@@ -21,6 +21,7 @@ class Demo:
             #np.save("torch_input.npy",input_img.detach().numpy())
             
             input_img = input_img.to(self.device, non_blocking=True)
+            print(input_img.shape)
 
             num_batch = input_img.shape[0]
             with torch.no_grad():
@@ -32,9 +33,9 @@ class Demo:
                 for b in range(num_batch):
                     if best_box_list[b] is None:
                         continue
-                    print(best_box_list[b])
+                    # print(best_box_list[b])
                     final_box_list = [bbox for bbox in best_box_list[b] if bbox[4] > 0.5]
-                    print("final :", final_box_list)
+                    # print("final :", final_box_list)
 
                     if final_box_list is None:
                         continue

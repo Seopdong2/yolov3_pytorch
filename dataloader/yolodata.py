@@ -12,11 +12,11 @@ class Yolodata(Dataset):
     file_dir = ""
     anno_dir = ""
     file_txt = ""
-    train_dir = "C:\\data\\tstl_data"
-    train_txt = "all.txt"
-    valid_dir = "C:\\data\\tstl_eval"
-    valid_txt = "all.txt"
-    class_str = ['left', 'right', 'stop', 'crosswalk', 'uturn', 'traffic_light']
+    train_dir = "/home/ubuntu/dev/yolov3-pytorch/datasets/training"
+    train_txt = "train.txt"
+    valid_dir = "/home/ubuntu/dev/yolov3-pytorch/datasets/eval"
+    valid_txt = "eval.txt"
+    class_str = ['left', 'right', 'stop', 'crosswalk', 'traffic_light', 'xycar']
     num_class = None
     img_data = []
     def __init__(self, is_train=True, transform=None, cfg_param=None):
@@ -25,13 +25,14 @@ class Yolodata(Dataset):
         self.transform = transform
         self.num_class = cfg_param['class']
         if self.is_train:
-            self.file_dir = self.train_dir+"\\JPEGImages\\"
-            self.file_txt = self.train_dir+"\\ImageSets\\"+self.train_txt
-            self.anno_dir = self.train_dir+"\\Annotations\\"
+            self.file_dir = self.train_dir+"/JPEGImages/"+"/JPEGImages/"
+            self.file_txt = self.train_dir+"/ImageSets/"+self.train_txt
+            self.anno_dir = self.train_dir+"/Annotations/"+"/Annotations/"
         else:
-            self.file_dir = self.valid_dir+"\\JPEGImages\\"
-            self.file_txt = self.valid_dir+"\\ImageSets\\"+self.valid_txt
-            self.anno_dir = self.valid_dir+"\\Annotations\\"
+            self.file_dir = self.valid_dir+"/JPEGImages/"+"/JPEGImages/"
+            self.file_txt = self.valid_dir+"/ImageSets/"+self.valid_txt
+            self.anno_dir = self.valid_dir+"/Annotations/"+"/Annotations/"
+        
 
         img_names = []
         img_data = []

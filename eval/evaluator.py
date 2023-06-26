@@ -4,9 +4,11 @@ import PIL, time
 from train.loss import *
 import csv
 from terminaltables import AsciiTable
+import pandas as pd
+import os
 
 class Evaluator:
-    def __init__(self, model, eval_data, eval_loader, device, hparam):
+    def __init__(self, model, eval_data, eval_loader, device, hparam, weight_dir):
         self.model = model
         self.class_str = eval_data.class_str
         self.eval_loader = eval_loader
@@ -17,55 +19,86 @@ class Evaluator:
         self.fn = torch.zeros(self.model.n_classes, dtype=torch.int64, requires_grad=False) #fn
         self.fp = torch.zeros(self.model.n_classes, dtype=torch.int64, requires_grad=False) #fp
         self.preds = None
+        self.weight_dir = weight_dir
 
     def run(self):
-        predict_all = []
-        gt_labels = []
-        for i, batch in enumerate(self.eval_loader):
-            #drop the invalid frames
-            if batch is None:
-                continue
-            input_img, targets, _ = batch
             
-            input_img = input_img.to(self.device, non_blocking=True)
+            best_ap = 0.0
+            best_models = []
+
+            weight_files = os.listdir(self.weight_dir)
             
-            gt_labels += targets[...,1].tolist()
-
-            targets[...,2:6] = cxcy2minmax(targets[...,2:6])
-            input_wh = [input_img.shape[3], input_img.shape[2]]
-            targets[...,2] *= input_wh[0]
-            targets[...,4] *= input_wh[0]
-            targets[...,3] *= input_wh[1]
-            targets[...,5] *= input_wh[1]
-            start_time = time.time()
-            with torch.no_grad():
-                output = self.model(input_img)
-                best_box_list = non_max_suppression(output, conf_thres=0.1, iou_thres=0.5)
+            for weight_file in weight_files:
+                if not weight_file.endswith(".pth"):
+                    continue
                 
-            predict_all += get_batch_statistics(best_box_list, targets, iou_threshold=0.5)
-                
-            if len(predict_all) == 0:
-                print("no detection in eval data")
-                return None
-            if i % 100 == 0:
-                print("-------eval {}th iter -----".format(i))
-        # Concatenate sample statistics
-        true_positives, pred_scores, pred_labels = [
-            np.concatenate(x, 0) for x in list(zip(*predict_all))]
+                model_path = os.path.join(self.weight_dir, weight_file)
+                checkpoint = torch.load(model_path, map_location=torch.device('cuda'))
+                self.model.load_state_dict(checkpoint['model_state_dict'])
+                self.model.eval()
 
-        metrics_output = ap_per_class(
-            true_positives, pred_scores, pred_labels, gt_labels)
-        
-        #print eval result
-        if metrics_output is not None:
-            precision, recall, ap, f1, ap_class = metrics_output
-            ap_table = [["Index", "Class", "AP"]]
-            for i, c in enumerate(ap_class):
-                ap_table += [[c, self.class_str[c], "%.5f" % ap[i]]]
-            print(AsciiTable(ap_table).table)
-        print("---- mAP {AP.mean():.5f} ----")
-        
-    
+                predict_all = []
+                gt_labels = []
+                for i, batch in enumerate(self.eval_loader):
+                    # drop the invalid frames
+                    if batch is None:
+                        continue
+                    input_img, targets, _ = batch
+
+                    input_img = input_img.to(self.device, non_blocking=True)
+
+                    gt_labels += targets[..., 1].tolist()
+
+                    targets[..., 2:6] = cxcy2minmax(targets[..., 2:6])
+                    input_wh = [input_img.shape[3], input_img.shape[2]]
+                    targets[..., 2] *= input_wh[0]
+                    targets[..., 4] *= input_wh[0]
+                    targets[..., 3] *= input_wh[1]
+                    targets[..., 5] *= input_wh[1]
+                    start_time = time.time()
+                    with torch.no_grad():
+                        output = self.model(input_img)
+                        print(input_img.shape)
+                        best_box_list = non_max_suppression(output, conf_thres=0.1, iou_thres=0.5)
+
+                    predict_all += get_batch_statistics(best_box_list, targets, iou_threshold=0.5)
+
+                    if len(predict_all) == 0:
+                        print("no detection in eval data")
+                        return None
+                    if i % 100 == 0:
+                        print("-------eval {}th iter -----".format(i))
+                # Concatenate sample statistics
+                true_positives, pred_scores, pred_labels = [
+                    np.concatenate(x, 0) for x in list(zip(*predict_all))]
+
+                metrics_output = ap_per_class(
+                    true_positives, pred_scores, pred_labels, gt_labels)
+
+                # print eval result
+                if metrics_output is not None:
+                    precision, recall, ap, f1, ap_class = metrics_output
+                    ap_table = [["Index", "Class", "AP"]]
+                    for i, c in enumerate(ap_class):
+                        ap_table += [[c, self.class_str[c], "%.5f" % ap[i]]]
+                    print(AsciiTable(ap_table).table)
+                    mAP = ap.mean()
+                    print("---- mAP {:.5f} ----".format(mAP))
+                    print("weight_file : {}".format(weight_file))
+                    print("================== iter ends =======================")
+
+                    if mAP > best_ap:
+                        best_ap = mAP
+                        best_models.append((best_ap, weight_file))
+
+            if len(best_models) > 0:
+                print("Best models:")
+                for _map, weight_file in best_models:
+                    print("mAP :{} model : {}".format(_map, weight_file))
+            else:
+                print("No models found.")
+                
+            
     def evaluate(self, preds, targets):
         #class mapping
         class8 = [0,1,2,3,4,5,6,7] #Car, Van, Truck, Ped, Ped_sitting, Cyclist, Tram, Misc

@@ -10,9 +10,10 @@ from dataloader.yolodata import *
 from dataloader.data_transforms import *
 
 from terminaltables import AsciiTable
+from tqdm import tqdm
 
 class Trainer:
-    def __init__(self, model, train_loader, eval_loader, hparam, class_str, device, checkpoint = None, torch_writer = None):
+    def __init__(self, model, train_loader, eval_loader, hparam, targeted_epoch, class_str, device, checkpoint = None, torch_writer = None):
         self.model = model
         self.train_loader = train_loader
         self.eval_loader = eval_loader
@@ -25,6 +26,10 @@ class Trainer:
         self.yololoss = YoloLoss(self.device, self.model.n_classes, hparam['ignore_cls'])
         self.optimizer = optim.SGD(model.parameters(), lr=hparam['lr'], momentum=hparam['momentum'], weight_decay=hparam['decay'])
         self.class_str = class_str
+        self.targeted_epoch = targeted_epoch
+        self.early_stopping_patience = 10
+        self.best_loss = float('inf')
+        self.num_epochs_without_improvement = 0
 
         
         if checkpoint is not None:
@@ -48,7 +53,7 @@ class Trainer:
             self.model.train()
             loss = self.run_iter()
             self.epoch += 1
-            if self.epoch % 50 == 0:
+            if self.epoch % 25 == 0:
                 checkpoint_path = os.path.join("./output", "model_epoch" + str(self.epoch) + ".pth")
                 torch.save({'epoch': self.epoch,
                             'iteration': self.iter,
@@ -59,11 +64,29 @@ class Trainer:
                 #evaluate
                 self.model.eval()
                 self.run_eval()
+
+
+                # loss update check
+                if loss < self.best_loss:
+                    self.best_loss = loss
+                    self.num_epochs_without_improvement = 0
+                else:
+                    self.num_epochs_without_improvement += 1
+                
+                # Check if early stopping criteria met
+                if self.num_epochs_without_improvement >= self.early_stopping_patience:
+                    print("Early stopping triggered. No improvement in loss for {} epochs.".format(self.early_stopping_patience))
+                    break
+
             # if iteration is greater than max_iteration, break
-            if self.max_batch <= self.iter:
+            if self.epoch == self.targeted_epoch:
                 break
 
     def run_iter(self):
+        ###########tqdm added################
+        pbar = tqdm(total=len(self.train_loader), desc=f"Epoch {self.epoch}", ncols=150)
+        
+
         #torch.autograd.set_detect_anomaly(True)
         for i, batch in enumerate(self.train_loader):
             #drop the invalid frames
@@ -114,6 +137,10 @@ class Trainer:
                 loss_name = ['total_loss','obj_loss', 'cls_loss', 'box_loss']
                 for ln, ls in zip(loss_name, loss_list):
                     self.torch_writer.add_scalar(ln, ls, self.iter)
+
+            pbar.set_postfix({"Loss": loss / (i + 1), "LR": get_lr(self.optimizer)})
+            pbar.update(1)
+        pbar.close()
         return loss
     
     def run_eval(self):

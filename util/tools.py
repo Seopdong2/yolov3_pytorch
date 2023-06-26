@@ -456,7 +456,7 @@ def get_hyperparam(cfg):
             in_width = int(c['width'])
             in_height = int(c['height'])
             in_channels = int(c['channels'])
-            _class = int(c['class'])
+            _class = int(c['classes'])
             ignore_cls = int(c['ignore_cls'])
 
             return {'batch':batch,

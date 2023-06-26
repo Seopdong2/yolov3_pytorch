@@ -42,6 +42,8 @@ def parse_args():
                         default=None, type=str)
     parser.add_argument('--pretrained', dest='pretrained', help = "the path of pre-trained model (.weights)",
                         default=None, type=str)
+    parser.add_argument('--epoch', dest='epoch', help="number of epochs",
+                        default=100, type=int)  # Set default value to 50
 
     if len(sys.argv) == 1:
         parser.print_help()
@@ -154,14 +156,14 @@ def train(cfg_param = None, using_gpus = None):
     yolo_model.train()
     
     #Set trainer
-    trainer = Trainer(yolo_model, train_loader, eval_dataloader, cfg_param, eval_data.class_str, device, checkpoint, torch_writer = torch_writer)
+    trainer = Trainer(yolo_model, train_loader, eval_dataloader, cfg_param, args.epoch, eval_data.class_str, device, checkpoint, torch_writer = torch_writer)
     trainer.run()
 
 def eval(cfg_param = None, using_gpus = None):
     print("evaluation")
     transforms = get_transformations(cfg_param, is_train = False)    
     eval_data = Yolodata(is_train = False, transform = transforms, cfg_param = cfg_param)
-    eval_loader = DataLoader(eval_data, batch_size = 1, num_workers = 0, pin_memory = True, drop_last = False, shuffle = False, collate_fn=collate_fn)
+    eval_loader = DataLoader(eval_data, batch_size = 4, num_workers = 0, pin_memory = True, drop_last = False, shuffle = False, collate_fn=collate_fn)
     
     model = DarkNet53(args.cfg, cfg_param)
 
@@ -186,15 +188,17 @@ def eval(cfg_param = None, using_gpus = None):
     
     torch.backends.cudnn.benchmark = True
 
-    evaluator = Evaluator(model, eval_data, eval_loader, device, cfg_param)
+    weight_dir_path = "/home/ubuntu/dev/yolov3-pytorch/output"
+    evaluator = Evaluator(model, eval_data, eval_loader, device, cfg_param, weight_dir_path)
     
     evaluator.run()
+    
     
 def demo(cfg_param = None, using_gpus = None):
     print("demo")
     transforms = get_transformations(cfg_param, is_train = False)    
     data = Yolodata(is_train = False, transform = transforms, cfg_param = cfg_param)
-    demo_loader = DataLoader(data, batch_size = 1, num_workers = 0, pin_memory = True, drop_last = False, shuffle = False, collate_fn=collate_fn)
+    demo_loader = DataLoader(data, batch_size = 4, num_workers = 0, pin_memory = True, drop_last = False, shuffle = False, collate_fn=collate_fn)
     
     model = DarkNet53(args.cfg, cfg_param)
     model.eval()
